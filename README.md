@@ -1,2 +1,4 @@
 # DCT-Compression
-Image Compression with DCT basis 
+
+2D DCT Image Compression with opencv
+
