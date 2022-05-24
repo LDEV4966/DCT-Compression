@@ -1,8 +1,7 @@
 import math
 import cv2
 import numpy as np
-import imageio
-
+import copy
 
 def makeDctBasis() :
     N = 8
@@ -18,7 +17,7 @@ def makeDctBasis() :
                 for j in range(M) :
                     cosU = math.cos(((2*i+1) * (u*math.pi))/(N*2))
                     cosV = math.cos(((2*j+1) * (v*math.pi))/(N*2))
-                    tmp[i][j] = (constant*cosU*cosV)
+                    tmp[i][j] = round((constant*cosU*cosV),4)
             basis[u].append(tmp)
     return basis
 
@@ -40,20 +39,6 @@ def makeIDctBasis():
             basis[i].append(tmp)
     return basis
 
-    # for i in range(len(grayImg)) :
-    #     for j in range(len(grayImg[0])) :
-    #         print(grayImg[i][j] , end = " ")
-    #     print()
-
-def getBlocks(img,h,w) :
-    blocks = [[0] * (w // 8) for _ in range(h // 8)]
-    splitedImg = np.vsplit(img,h//8)
-    for idx1,ary in enumerate(splitedImg) :
-        nary = np.hsplit(ary, w // 8)
-        for idx2,block in enumerate(nary) :
-            blocks[idx1][idx2] = block
-    return blocks
-
 def dctPerform(basis,blocks) :
     N = 8
     for u in range(len(blocks)) :
@@ -70,21 +55,22 @@ def dctPerform(basis,blocks) :
             blocks[u][v] = Fblock
     return blocks
 
-def inverseDctPerform(basis,blocks) :
-    N = 8
-    for u in range(len(blocks)) :
-        for v in range(len(blocks[0])) :
+def inverseDctPerform(basis,blocks,Coeff) :
+    N=8
+    cpBlocks = copy.deepcopy(blocks)
+    for u in range(len(cpBlocks)) :
+        for v in range(len(cpBlocks[0])) :
             fBlock = list([0] * N for _ in range(N))
             for bi in range(len(basis)) :
                 for bj in range(len(basis[0])) :
                     b = basis[bi][bj]
                     accum = 0
-                    for i in range(N) :
-                        for j in range(N) :
-                            accum += (blocks[u][v][i][j] * b[i][j])
+                    for i in range(Coeff) :
+                        for j in range(Coeff) :
+                            accum += (cpBlocks[u][v][i][j] * b[i][j])
                     fBlock[bi][bj] = round((accum*1000))
-            blocks[u][v] = fBlock
-    return blocks
+            cpBlocks[u][v] = fBlock
+    return cpBlocks
 
 def convertListToNumpyArary(blocks) :
     blocks = np.array(blocks)
@@ -92,6 +78,15 @@ def convertListToNumpyArary(blocks) :
         blocks[i] = np.array(blocks[i])
         for j in range(len(blocks[0])) :
             blocks[i][j] = np.array(blocks[i][j])
+    return blocks
+
+def splitBlocks(img,h,w) :
+    blocks = [[0] * (w // 8) for _ in range(h // 8)]
+    splitedImg = np.vsplit(img,h//8)
+    for idx1,ary in enumerate(splitedImg) :
+        nary = np.hsplit(ary, w // 8)
+        for idx2,block in enumerate(nary) :
+            blocks[idx1][idx2] = block
     return blocks
 
 def mergeBlocks(blocks,h,w) :
@@ -103,13 +98,6 @@ def mergeBlocks(blocks,h,w) :
                 for j in range(N) :
                     arr[i+(u*N)][j+(v*N)] = int(blocks[u][v][i][j])
     return arr
-    # for i in range(len(blocks)) :
-    #     merged = np.vstack((merged,blocks[i]))
-    # print(merged)
-        # for j in range(len(blocks[0])) :
-        #     print(blocks[i][j])
-        #     print()
-        #     print()
 
 
 if __name__ == "__main__" :
@@ -118,24 +106,34 @@ if __name__ == "__main__" :
     basis = makeDctBasis()
 
     # 2 - 너무 크지 않은 영상 (ex. Lena)을 read 하여 graylevel로 변환
-    img = cv2.imread("lena.png")
+    img = cv2.imread("test.jpeg")
     h, w, _ = img.shape
     grayImg = cv2.cvtColor(img,cv2.COLOR_RGB2GRAY)
 
     # 3 - 이미지 blocks으로 나누기 & DCT 계산 후, Fuv Blocks 반환
-    blocks = getBlocks(grayImg,h,w)
+    blocks = splitBlocks(grayImg,h,w)
     FuvBlocks = dctPerform(basis,blocks)
 
     # 4 - F(u,v)를 다시 IDCT로 8x8 영상을 다시 복원
+
     # 4-1) F(u,v) 그대로 사용
     basis = makeIDctBasis()
-    fijBlocks = inverseDctPerform(basis,FuvBlocks)
+    fijBlocks = inverseDctPerform(basis,FuvBlocks,8) # coeff = 8
     fijBlocks = convertListToNumpyArary(fijBlocks)
     fij = mergeBlocks(fijBlocks,h,w)
     cv2.imwrite('test1.jpeg', fij)
+
     # 4-2) F(u,v) 좌상단 4x4는 그대로 두고 나머지는 0로 변경 사용
+    fijBlocks = inverseDctPerform(basis, FuvBlocks,4) # coeff = 4
+    fijBlocks = convertListToNumpyArary(fijBlocks)
+    fij = mergeBlocks(fijBlocks, h, w)
+    cv2.imwrite('test2.jpeg', fij)
 
-
+    # 4-3) F(u,v) 좌상단 2x2는 그대로 두고 나머지는 0로 변경 사용
+    fijBlocks = inverseDctPerform(basis, FuvBlocks, 2) # coeff = 2
+    fijBlocks = convertListToNumpyArary(fijBlocks)
+    fij = mergeBlocks(fijBlocks, h, w)
+    cv2.imwrite('test3.jpeg', fij)
 
 
 
